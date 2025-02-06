@@ -1,0 +1,10 @@
+[repository]
+name = "magic-mouse-gaps"
+authors = ["Dregu"]
+#commit_pins = []
+
+[magic-mouse-gaps]
+description = "Move mouse events from just outside a window (i.e. on gaps and borders) to just inside a nearby window, to click browser tabs without having to aim."
+authors = ["Dregu"]
+output = "libmagic-mouse-gaps.so"
+build = ["make"]
