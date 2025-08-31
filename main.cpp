@@ -23,14 +23,19 @@ APICALL EXPORT std::string PLUGIN_API_VERSION() {
 void hkNotifyMotion(CSeatManager* thisptr, uint32_t time_msec, const Vector2D& local) {
     static auto* const PMARGIN = (Hyprlang::INT* const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:magic-mouse-gaps:margin")->getDataStaticPtr();
     static auto* const PCLASS  = (Hyprlang::STRING const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:magic-mouse-gaps:class")->getDataStaticPtr();
+    static auto* const PEDGE   = (Hyprlang::STRING const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:magic-mouse-gaps:edge")->getDataStaticPtr();
 
     Vector2D           newCoords = local;
 
     if (!g_pCompositor->m_lastWindow.expired() && RE2::FullMatch(g_pCompositor->m_lastWindow->m_class, *PCLASS) && g_pCompositor->m_lastMonitor) {
-        if (local.x < 0)
+        if (strstr(*PEDGE, "l") && local.x < 0)
             newCoords.x = **PMARGIN;
-        if (local.y < 0)
+        if (strstr(*PEDGE, "t") && local.y < 0)
             newCoords.y = **PMARGIN;
+        if (strstr(*PEDGE, "r") && local.x > g_pCompositor->m_lastWindow->m_realSize->goal().x)
+            newCoords.x = g_pCompositor->m_lastWindow->m_realSize->goal().x - **PMARGIN;
+        if (strstr(*PEDGE, "b") && local.y > g_pCompositor->m_lastWindow->m_realSize->goal().y)
+            newCoords.y = g_pCompositor->m_lastWindow->m_realSize->goal().y - **PMARGIN;
     }
 
     (*(origMotion)g_pMouseMotionHook->m_original)(thisptr, time_msec, newCoords);
@@ -51,6 +56,7 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle) {
 
     HyprlandAPI::addConfigValue(PHANDLE, "plugin:magic-mouse-gaps:margin", Hyprlang::INT{0});
     HyprlandAPI::addConfigValue(PHANDLE, "plugin:magic-mouse-gaps:class", Hyprlang::STRING{"firefox"});
+    HyprlandAPI::addConfigValue(PHANDLE, "plugin:magic-mouse-gaps:edge", Hyprlang::STRING{"t"});
 
     auto FNS = HyprlandAPI::findFunctionsByName(PHANDLE, "sendPointerMotion");
     for (auto& fn : FNS) {
