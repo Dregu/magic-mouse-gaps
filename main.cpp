@@ -1,6 +1,7 @@
 #define WLR_USE_UNSTABLE
 
 #include <unistd.h>
+#include <re2/re2.h>
 
 #include <hyprland/src/Compositor.hpp>
 #include <hyprland/src/config/ConfigManager.hpp>
@@ -19,18 +20,13 @@ APICALL EXPORT std::string PLUGIN_API_VERSION() {
     return HYPRLAND_API_VERSION;
 }
 
-bool hasClass(std::string const& s, std::string const& name) {
-    auto const x = s.find(name);
-    return x != std::string::npos && (!x || (x && !isalpha(s[x - 1]))) && x <= s.size() - name.size() && !isalpha(s[x + name.size()]);
-}
-
 void hkNotifyMotion(CSeatManager* thisptr, uint32_t time_msec, const Vector2D& local) {
     static auto* const PMARGIN = (Hyprlang::INT* const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:magic-mouse-gaps:margin")->getDataStaticPtr();
     static auto* const PCLASS  = (Hyprlang::STRING const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:magic-mouse-gaps:class")->getDataStaticPtr();
 
     Vector2D           newCoords = local;
 
-    if (!g_pCompositor->m_lastWindow.expired() && hasClass(*PCLASS, g_pCompositor->m_lastWindow->m_initialClass) && g_pCompositor->m_lastMonitor) {
+    if (!g_pCompositor->m_lastWindow.expired() && RE2::FullMatch(g_pCompositor->m_lastWindow->m_class, *PCLASS) && g_pCompositor->m_lastMonitor) {
         if (local.x < 0)
             newCoords.x = **PMARGIN;
         if (local.y < 0)
