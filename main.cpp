@@ -7,7 +7,10 @@
 #include <hyprland/src/config/ConfigManager.hpp>
 #include <hyprland/src/desktop/Window.hpp>
 #include <hyprland/src/managers/SeatManager.hpp>
+#include <hyprland/src/managers/input/InputManager.hpp>
 #include <hyprland/src/plugins/PluginAPI.hpp>
+#include <hyprland/src/desktop/LayerSurface.hpp>
+#include "hyprland/src/helpers/memory/Memory.hpp"
 
 inline HANDLE PHANDLE = nullptr;
 
@@ -26,16 +29,54 @@ void hkNotifyMotion(CSeatManager* thisptr, uint32_t time_msec, const Vector2D& l
     static auto* const PEDGE   = (Hyprlang::STRING const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:magic-mouse-gaps:edge")->getDataStaticPtr();
 
     Vector2D           newCoords = local;
+    Vector2D           surfacePos;
+    Vector2D           surfaceCoords;
+    bool               foundSurface = false;
+    SP<CLayerSurface>  pFoundLayerSurface;
+    const auto         PMONITOR = g_pInputManager->isLocked() && g_pCompositor->m_lastMonitor ? g_pCompositor->m_lastMonitor.lock() : g_pCompositor->getMonitorFromCursor();
 
-    if (!g_pCompositor->m_lastWindow.expired() && RE2::FullMatch(g_pCompositor->m_lastWindow->m_class, *PCLASS) && g_pCompositor->m_lastMonitor) {
-        if (strstr(*PEDGE, "l") && local.x < 0)
-            newCoords.x = **PMARGIN;
-        if (strstr(*PEDGE, "t") && local.y < 0)
-            newCoords.y = **PMARGIN;
-        if (strstr(*PEDGE, "r") && local.x > g_pCompositor->m_lastWindow->m_realSize->goal().x)
-            newCoords.x = g_pCompositor->m_lastWindow->m_realSize->goal().x - **PMARGIN;
-        if (strstr(*PEDGE, "b") && local.y > g_pCompositor->m_lastWindow->m_realSize->goal().y)
-            newCoords.y = g_pCompositor->m_lastWindow->m_realSize->goal().y - **PMARGIN;
+    if (PMONITOR) {
+        // forced above all
+        if (!g_pInputManager->m_exclusiveLSes.empty()) {
+            if (!foundSurface)
+                foundSurface = g_pCompositor->vectorToLayerSurface(newCoords, &g_pInputManager->m_exclusiveLSes, &surfaceCoords, &pFoundLayerSurface);
+
+            if (!foundSurface) {
+                foundSurface = (*g_pInputManager->m_exclusiveLSes.begin())->m_surface->resource();
+                surfacePos   = (*g_pInputManager->m_exclusiveLSes.begin())->m_realPosition->goal();
+            }
+        }
+
+        if (!foundSurface)
+            foundSurface = g_pCompositor->vectorToLayerPopupSurface(newCoords, PMONITOR, &surfaceCoords, &pFoundLayerSurface);
+
+        // overlays are above fullscreen
+        if (!foundSurface)
+            foundSurface = g_pCompositor->vectorToLayerSurface(newCoords, &PMONITOR->m_layerSurfaceLayers[3], &surfaceCoords, &pFoundLayerSurface);
+
+        // also IME popups
+        if (!foundSurface) {
+            auto popup = g_pInputManager->m_relay.popupFromCoords(newCoords);
+            if (popup) {
+                foundSurface = popup->getSurface();
+                surfacePos   = popup->globalBox().pos();
+            }
+        }
+
+        // also top layers
+        if (!foundSurface)
+            foundSurface = g_pCompositor->vectorToLayerSurface(newCoords, &PMONITOR->m_layerSurfaceLayers[2], &surfaceCoords, &pFoundLayerSurface);
+
+        if (!foundSurface && !g_pCompositor->m_lastWindow.expired() && RE2::FullMatch(g_pCompositor->m_lastWindow->m_class, *PCLASS)) {
+            if (strstr(*PEDGE, "l") && local.x < 0)
+                newCoords.x = **PMARGIN;
+            if (strstr(*PEDGE, "t") && local.y < 0)
+                newCoords.y = **PMARGIN;
+            if (strstr(*PEDGE, "r") && local.x > g_pCompositor->m_lastWindow->m_realSize->goal().x)
+                newCoords.x = g_pCompositor->m_lastWindow->m_realSize->goal().x - **PMARGIN;
+            if (strstr(*PEDGE, "b") && local.y > g_pCompositor->m_lastWindow->m_realSize->goal().y)
+                newCoords.y = g_pCompositor->m_lastWindow->m_realSize->goal().y - **PMARGIN;
+        }
     }
 
     (*(origMotion)g_pMouseMotionHook->m_original)(thisptr, time_msec, newCoords);
