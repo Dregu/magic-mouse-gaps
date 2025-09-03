@@ -25,6 +25,7 @@ APICALL EXPORT std::string PLUGIN_API_VERSION() {
 
 void hkNotifyMotion(CSeatManager* thisptr, uint32_t time_msec, const Vector2D& local) {
     static auto* const PMARGIN = (Hyprlang::INT* const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:magic-mouse-gaps:margin")->getDataStaticPtr();
+    static auto* const PSIZE   = (Hyprlang::INT* const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:magic-mouse-gaps:size")->getDataStaticPtr();
     static auto* const PCLASS  = (Hyprlang::STRING const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:magic-mouse-gaps:class")->getDataStaticPtr();
     static auto* const PEDGE   = (Hyprlang::STRING const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:magic-mouse-gaps:edge")->getDataStaticPtr();
 
@@ -35,7 +36,7 @@ void hkNotifyMotion(CSeatManager* thisptr, uint32_t time_msec, const Vector2D& l
     SP<CLayerSurface>  pFoundLayerSurface;
     const auto         PMONITOR = g_pInputManager->isLocked() && g_pCompositor->m_lastMonitor ? g_pCompositor->m_lastMonitor.lock() : g_pCompositor->getMonitorFromCursor();
 
-    if (PMONITOR) {
+    if (PMONITOR && **PSIZE > 0) {
         // forced above all
         if (!g_pInputManager->m_exclusiveLSes.empty()) {
             if (!foundSurface)
@@ -68,14 +69,15 @@ void hkNotifyMotion(CSeatManager* thisptr, uint32_t time_msec, const Vector2D& l
             foundSurface = g_pCompositor->vectorToLayerSurface(newCoords, &PMONITOR->m_layerSurfaceLayers[2], &surfaceCoords, &pFoundLayerSurface);
 
         if (!foundSurface && !g_pCompositor->m_lastWindow.expired() && RE2::FullMatch(g_pCompositor->m_lastWindow->m_class, *PCLASS)) {
-            if (strstr(*PEDGE, "l") && local.x < 0)
+            const auto& winSize = g_pCompositor->m_lastWindow->m_realSize->goal();
+            if (strstr(*PEDGE, "l") && local.x < 0 && local.x >= -**PSIZE)
                 newCoords.x = **PMARGIN;
-            if (strstr(*PEDGE, "t") && local.y < 0)
+            else if (strstr(*PEDGE, "r") && local.x > winSize.x && local.x <= winSize.x + **PSIZE)
+                newCoords.x = winSize.x - **PMARGIN;
+            if (strstr(*PEDGE, "t") && local.y < 0 && local.y >= -**PSIZE)
                 newCoords.y = **PMARGIN;
-            if (strstr(*PEDGE, "r") && local.x > g_pCompositor->m_lastWindow->m_realSize->goal().x)
-                newCoords.x = g_pCompositor->m_lastWindow->m_realSize->goal().x - **PMARGIN;
-            if (strstr(*PEDGE, "b") && local.y > g_pCompositor->m_lastWindow->m_realSize->goal().y)
-                newCoords.y = g_pCompositor->m_lastWindow->m_realSize->goal().y - **PMARGIN;
+            else if (strstr(*PEDGE, "b") && local.y > winSize.y && local.y <= winSize.y + **PSIZE)
+                newCoords.y = winSize.y - **PMARGIN;
         }
     }
 
@@ -96,6 +98,7 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle) {
   }*/
 
     HyprlandAPI::addConfigValue(PHANDLE, "plugin:magic-mouse-gaps:margin", Hyprlang::INT{0});
+    HyprlandAPI::addConfigValue(PHANDLE, "plugin:magic-mouse-gaps:size", Hyprlang::INT{32});
     HyprlandAPI::addConfigValue(PHANDLE, "plugin:magic-mouse-gaps:class", Hyprlang::STRING{"firefox"});
     HyprlandAPI::addConfigValue(PHANDLE, "plugin:magic-mouse-gaps:edge", Hyprlang::STRING{"t"});
 
